@@ -2,7 +2,7 @@ library(MASS)
 
 K <- 3;
 J <- 3;
-N <- 1500;
+N <- 500;
 P <- 2
 
 # stick breaking construction to generate a random correlation matrix
@@ -17,10 +17,10 @@ for (i in 2:J) {
   L_Omega[i,i] <- sqrt(bound);
 }
 
+Omega <- L_Omega %*% t(L_Omega);
 
-Omega <- matrix(c(1, 0.9, 0.8, 0.9, 1, 0.7, 0.8,0.7,1), 3)
+# Omega <- matrix(c(1, 0.9, 0.8, 0.9, 1, 0.7, 0.8,0.7,1), 3)
 
-#Omega <- L_Omega %*% t(L_Omega);
 
 x <- matrix(rnorm(N * P, 0, 1), N, P);
 
@@ -72,7 +72,7 @@ dev.off()
 ## Different number of classes for each response ##
 ###################################################
 
-alpha <- list(c(-1, 1), c(-1, 0, 1), 0)
+alpha <- list(c(-1, 0, 1), c(-1.5, 0), c(0))
 y <- matrix(0, N, J);
 for (n in 1:N) {
   for (j in 1:J) {
@@ -82,7 +82,8 @@ for (n in 1:N) {
 
 DATA <- list(Kmax = max(y), 
              K = apply(y, 2, max),
-             Ksum = sum(apply(y, 2, max)),
+             pos_alpha_beg = cumsum(c(0, apply(y, 2, max) - 1))[1:J] + 1,
+             pos_alpha_end = cumsum(apply(y, 2, max) - 1),
              P = P, J = J, N = N, y = y, x = x)
 
 mod <- cmdstan_model("mvord_probit_diffK.stan")
