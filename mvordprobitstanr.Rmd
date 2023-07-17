@@ -1,0 +1,79 @@
+---
+title: "Multivariate ordinal probit in rstan"
+author: "Laura Vana"
+date: "2023-07-16"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Assume we have a collection of $J$ ordinal responses $Y = (\boldsymbol y_1, \boldsymbol y_2, \ldots \boldsymbol  y_J)$ where $\boldsymbol y_j = (y_{1,j}, \ldots, y_{N,j})^\top$. 
+Each variable can take a value out of $K_j$ classes.
+Let $X$ be an $(N\times P)$ matrix of covariates. On the latent scale the multivariate ordinal probit model assumes:
+
+\begin{equation}
+\tilde Y = XB + E (\#eq:model)
+\end{equation}
+
+where $B$ is an $(P\times J)$ matrix of regression coefficients and 
+$E$ is a matrix of error terms where each row is iid with $\boldsymbol e_n \sim MVN_J(0, \Omega)$.
+Note that $\Omega$ is a correlation matrix for identifiability purposes.
+The latent variables in $\tilde Y$ and the observed responses $Y$ are related by 
+the threshold parameters $\boldsymbol\alpha_j$ $j \in \{1,\dots,J\}$ with
+$-\infty\equiv\alpha_{0,j} < \alpha_{1,j}< \ldots, \alpha_{K_j-1,j}<\alpha_{K,j}\equiv\infty$:
+$$
+y_j \leq r_j \Rightarrow \alpha_{r_j-1, j}<\tilde y_j \leq \alpha_{r_j, j}
+$$
+These thresholds act as
+slotting parameters for the underlying multivariate normal distribution, which 
+motivates the use of the truncated multivariate normal distribution in the 
+estimation of the multivariate ordinal probit model.
+Following the notes of Ben Goodrich (see [here](https://00335207212371662729.googlegroups.com/attach/767409563fc2e/tMVN.pdf?part=0.1&view=1&vt=ANaJVrGgu4UQNbgJmY0JshGLD8_4zYs1sPJjmgVoE7ZaaSva2rSsLTl9nSsX8aFWtWl85v9DSG7eRgfRqTNa_pDCYRzmLiGN3gsRbbOJJ8Le1dP-BJ-kUF4)), a multivariate probit model (i.e., for multiple
+binary responses), has already been implemented by the Stan team (https://github.com/stan-dev/example-models/blob/master/misc/multivariate-probit/).
+The extension to the ordinal case is straightforward.
+
+For the sake of simplicity, let us assume all variables can take one of $K$ categories
+$\boldsymbol\alpha_1  =\ldots = \boldsymbol\alpha_J =\boldsymbol\alpha$.
+The model in \@ref(eq:model) can be re-written as:
+
+$$
+\tilde{Y} = XB + L \boldsymbol z
+$$
+where $L$ is the Cholesky matrix of $\Omega=LL^\top$ and $z \sim MNV_J(0,I_J)$. 
+Let $u\sim U(0,1)$. We then have
+$$
+\tilde{Y} = XB + L\boldsymbol z(\boldsymbol u), \quad \boldsymbol z(\boldsymbol u) = \Phi(u_1, \ldots, u_J)
+$$
+
+Let us denote  $\boldsymbol z_1 = \Phi^{-1}(\boldsymbol u_1, \boldsymbol u_2, \ldots \boldsymbol  u_{j-1})$.
+The extension consists in the following:
+
+1. for class $1$, $\alpha_1$ is an upper bound; therefore we have the bound
+$u^*_{1,j} = \Phi\left(\frac{\alpha_1 - (x\beta + L_{j1}\boldsymbol z1)}{L_{jj}}\right)$ and 
+$$
+v_{1,j}=\boldsymbol u_j u^*_{1,j},  \quad  v_{1,j} \sim U(0,u^*_{1,j})
+$$
+2. for classes 2 to $K-1$,  $\alpha_k$ is an upper bound and $\alpha_{k-1}$ is a lower bound respectively; we then have the bounds
+$\bar u^*_{k,j} = \Phi\left(\frac{\alpha_{k} - (x\beta + L_{j1}\boldsymbol z1)}{L_{jj}}\right)$ and
+$\underline u^*_{k,j} = \Phi\left(\frac{\alpha_{k-1} - (x\beta + L_{j1}\boldsymbol z1)}{L_{jj}}\right)$
+$$
+v_{k,j}=\underline u^*_{k,j}+(\bar u^*_{k,j}-\underline u^*_{k,j})u_j, \quad  v_j\sim U(\underline u^*_{k,j},\bar u^*_{k,j})
+$$
+
+
+3. for class $K$, $\alpha_{K-1}$ is a lower bound; so we have $u^*_{K,j} = \Phi\left(\frac{\alpha_{K-1} - (x\beta + L_{j1}\boldsymbol z1)}{L_{jj}}\right)$ and 
+$$
+v_{K,j}=u^*_{K,j}+(1-u^*_{K,j})u_j, \quad  v_j\sim U(u^*_{K,j},1)
+$$
+The Jacobian (on the log scale) adjustments for the transformations for the uniform variables
+are given by the $\log$ of the derivative of the transformation
+from $v_j$ to $u_j$, which 
+$$
+\begin{cases}
+\log(u^*_{1,j}), & \text{class } 1\\
+\log(\bar u^*_{k,j}-\underline u^*_{k,j}),& k = 2,\ldots, K-1\\
+\log(1-u^*_{K,j}), &\text{class } K\\
+\end{cases}
+$$
